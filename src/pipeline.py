@@ -1,0 +1,42 @@
+from prompts import *
+from neo4j_server import get_neo4j_service
+from llm_call import quick_call
+
+def step1_entity_recognition(query: str):
+    """
+    Performs entity recognition on the given query.
+    """
+    neo4j_service = get_neo4j_service()
+    entities = neo4j_service.list_entities()
+    
+    entity_map = {entity["name"]: {"id": entity["id"], "description": entity["description"]} 
+        for entity in entities if "Entity" in entity["labels"]}
+
+    from prompts import get_llm_re_entity_prompt
+
+    prompt = get_llm_re_entity_prompt(query, entity_map.keys())
+
+    llm_res = quick_call(prompt, return_json=True)
+    
+    entity = None if llm_res['json_content']['entity'] == '' else llm_res['json_content']['entity']
+    return entity
+
+def step2_get_subgraph(entity: str):
+    """
+    Retrieves the subgraph for the given entity.
+    """
+    neo4j_service = get_neo4j_service()
+    entity_path = neo4j_service.get_format_subgraph_paths(entity, depth=2)
+    entity_path = [item for item in entity_path if '->' in item]
+    return entity_path
+
+def step3_qa_with_llm(query: str, entity_path: str):
+    """
+    Answers the query based on the provided subgraph.
+    """
+    prompt = get_llm_qa_prompt(query, entity_path)
+    llm_res = quick_call(prompt)
+    return llm_res['content']
+    
+    
+
