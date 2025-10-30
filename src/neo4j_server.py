@@ -171,17 +171,20 @@ class Neo4jService:
                      name: str,
                      depth: int = 1,
                      direction: str = "both",
-                     limit: int = 1000) -> Dict[str, List[Dict[str, Any]]]:
+                     limit: int = 1000,
+                     node_labels: Optional[List[str]] = None) -> Dict[str, List[Dict[str, Any]]]:
         """
-        获取实体的多度子图。
+        获取实体的多度子图，确保返回完整的图结构用于可视化。
         Args:
-            name: 起始实体名称（或 title）
+            name: 起始实体名称
             depth: 路径最大跳数（>=1）
             direction: 关系方向，取值："out" | "in" | "both"
             limit: 返回路径数量上限（用于保护查询规模）
+            node_labels: 可选的节点标签过滤列表，如 ['Entity'] 只返回Entity标签的节点
         Returns:
             { nodes: [...], edges: [...] }
-        注意：Cypher 的可变长度路径不支持参数化范围，这里会安全地构造查询字符串。
+            nodes: [{id, name, labels, properties, element_id}]
+            edges: [{id, type, start, end, properties, element_id, start_node_id, end_node_id}]
         """
         depth = max(1, int(depth))
         if direction not in ("out", "in", "both"):
@@ -199,48 +202,144 @@ class Neo4jService:
             f"MATCH p=(start){pattern}(m) WHERE m.graph_id = $graph_id RETURN p LIMIT $limit"
         )
 
-        nodes_map: Dict[int, Dict[str, Any]] = {}
-        edges_map: Dict[Tuple[int, int, str], Dict[str, Any]] = {}
+        nodes_map: Dict[str, Dict[str, Any]] = {}  # 使用element_id作为key
+        edges_map: Dict[str, Dict[str, Any]] = {}  # 使用element_id作为key
+        all_nodes_map: Dict[str, Dict[str, Any]] = {}  # 保存所有节点，用于边的完整性检查
 
         with self.driver.session() as session:
             result = session.run(cypher, name=name, limit=limit, graph_id=self.graph_id)
             for record in result:
                 path = record["p"]
-                # 遍历路径上的节点
+                
+                # 先收集所有节点（不过滤）
                 for node in path.nodes:
-                    nid = node.id
-                    if nid not in nodes_map:
-                        nodes_map[nid] = self._normalize_node(list(node.labels), dict(node), nid)
-                # 遍历路径上的关系
+                    element_id = node.element_id
+                    if element_id not in all_nodes_map:
+                        node_labels_list = list(node.labels)
+                        node_info = self._normalize_node(node_labels_list, dict(node), node.id)
+                        node_info["element_id"] = element_id
+                        all_nodes_map[element_id] = node_info
+                        
+                        # 如果指定了节点标签过滤，检查节点是否符合条件
+                        if node_labels is None or any(label in node_labels_list for label in node_labels):
+                            nodes_map[element_id] = node_info
+                
+                # 收集所有边
                 for rel in path.relationships:
-                    start_id = rel.start_node.id
-                    end_id = rel.end_node.id
-                    key = (start_id, end_id, rel.type)
-                    if key not in edges_map:
-                        edges_map[key] = self._normalize_rel(rel, start_id, end_id)
+                    rel_element_id = rel.element_id
+                    if rel_element_id not in edges_map:
+                        start_node_id = rel.start_node.id
+                        end_node_id = rel.end_node.id
+                        start_element_id = rel.start_node.element_id
+                        end_element_id = rel.end_node.element_id
+                        
+                        edge_info = self._normalize_rel(rel, start_node_id, end_node_id)
+                        edge_info["element_id"] = rel_element_id
+                        edge_info["start_node_element_id"] = start_element_id  # 用于可视化连接
+                        edge_info["end_node_element_id"] = end_element_id      # 用于可视化连接
+                        edges_map[rel_element_id] = edge_info
 
-        return {
-            "nodes": list(nodes_map.values()),
-            "edges": list(edges_map.values()),
-        }
-
-    def run_cypher(self, query: str, params: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
-        """
-        执行通用 Cypher 查询，返回字典列表。
-        注意：仅用于受信任输入，或自行进行查询白名单控制。
-        自动添加 graph_id 参数到查询参数中。
-        """
-        # 自动添加 graph_id 到参数中
-        if params is None:
-            params = {}
-        params["graph_id"] = self.graph_id
+        # 确保返回的数据结构完整
+        nodes_list = list(nodes_map.values())
+        edges_list = list(edges_map.values())
         
-        with self.driver.session() as session:
-            result = session.run(query, **params)
-            rows: List[Dict[str, Any]] = []
-            for record in result:
-                rows.append(dict(record))
-            return rows
+        # 验证图结构完整性：只保留连接到过滤后节点的边
+        filtered_node_element_ids = {node["element_id"] for node in nodes_list}
+        valid_edges = []
+        
+        for edge in edges_list:
+            # 如果边的任意一端连接到过滤后的节点，就保留这条边
+            start_in_filtered = edge["start_node_element_id"] in filtered_node_element_ids
+            end_in_filtered = edge["end_node_element_id"] in filtered_node_element_ids
+            
+            if start_in_filtered or end_in_filtered:
+                valid_edges.append(edge)
+                
+                # 如果边的另一端节点不在过滤后的节点中，也要添加进来以保持图的完整性
+                if start_in_filtered and edge["end_node_element_id"] not in filtered_node_element_ids:
+                    if edge["end_node_element_id"] in all_nodes_map:
+                        nodes_list.append(all_nodes_map[edge["end_node_element_id"]])
+                        filtered_node_element_ids.add(edge["end_node_element_id"])
+                        
+                if end_in_filtered and edge["start_node_element_id"] not in filtered_node_element_ids:
+                    if edge["start_node_element_id"] in all_nodes_map:
+                        nodes_list.append(all_nodes_map[edge["start_node_element_id"]])
+                        filtered_node_element_ids.add(edge["start_node_element_id"])
+        
+        return {
+            "nodes": nodes_list,
+            "edges": valid_edges,
+            "stats": {
+                "total_nodes": len(nodes_list),
+                "total_edges": len(valid_edges),
+                "start_node": name,
+                "depth": depth,
+                "direction": direction
+            }
+        }
+    
+    def get_format_subgraph_paths(self, init_entity, depth = 2):
+        res_entity = self.get_subgraph(
+            name=init_entity, 
+            depth=depth, 
+            direction="both",
+            node_labels=['Entity']
+        )
+        ne = {}
+        du = {}
+        nodes = res_entity['nodes']
+        edges = res_entity['edges']
+        init_id = None 
+
+        # 先构建这个实体element_id对应实体信息的map
+        node_map ={}
+        for node in nodes:
+            if node['labels'][0] != 'Entity':
+                continue
+            # 使用element_id作为键，这样才能与边的start_node_element_id和end_node_element_id匹配
+            node_map[node['element_id']] = (node['name'], node['description'])
+            if node['name'] == init_entity:
+                init_id = node['element_id']
+            ne[node['element_id']] = []
+            du[node['element_id']] = 0
+        # print(init_id)
+
+        # 遍历edges，构建路径
+        edge_map = {}
+        for edge in edges:
+            start_node_id = edge['start_node_element_id']
+            end_node_id = edge['end_node_element_id']
+            if start_node_id not in node_map or end_node_id not in node_map:
+                continue
+            edge_map[(start_node_id, end_node_id)] = (edge['properties']['relation_type'], edge['properties']['description'])
+            if start_node_id not in ne:
+                ne[start_node_id] = []
+            ne[start_node_id].append(end_node_id)
+            du[end_node_id] += 1
+
+
+        res_paths = []
+        def dfs(node_id, path: str):
+            # print(path, node_id)
+            if node_id not in ne or ne[node_id] == []:
+                res_paths.append(path)
+                return
+            for ne_id in ne[node_id]:
+                dfs(ne_id, path  + '->' + edge_map[(node_id, ne_id)][0] + '->' + node_map[ne_id][0])
+
+        # dfs(init_id, query_entity)
+        # print(du)
+
+        # print(ne)
+        for node_id in du.keys():
+            if du[node_id] == 0:
+                # print(node_id, node_map[node_id][0])
+                dfs(node_id, node_map[node_id][0])
+
+        # print(res_paths)
+        return res_paths
+
+
 
     def close(self) -> None:
         if self.driver:
