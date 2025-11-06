@@ -28,7 +28,7 @@ class Neo4jService:
         self.uri = uri or os.getenv("NEO4J_URI")
         self.user = user or os.getenv("NEO4J_USER")
         self.password = password or os.getenv("NEO4J_PASSWORD")
-        self.graph_id = graph_id or os.getenv("NEO4J_GRAPH_ID", "643b6cd8-0664-46b2-8a1c-175585c48161")
+        self.graph_id = graph_id or os.getenv("NEO4J_GRAPH_ID", "651fa83d-2841-47c3-b4cf-7394a546f28e")
         
         if not all([self.uri, self.user, self.password]):
             raise ValueError("Neo4j 配置信息不完整，请在 .env 中设置 NEO4J_URI/USER/PASSWORD")
@@ -350,8 +350,8 @@ class Neo4jService:
 _neo4j_service: Optional[Neo4jService] = None
 
 
-def get_neo4j_service() -> Neo4jService:
+def get_neo4j_service(graph_id: str = None) -> Neo4jService:
     global _neo4j_service
     if _neo4j_service is None:
-        _neo4j_service = Neo4jService()
+        _neo4j_service = Neo4jService(graph_id = graph_id)
     return _neo4j_service

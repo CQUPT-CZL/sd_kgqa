@@ -2,11 +2,11 @@ from prompts import *
 from neo4j_server import get_neo4j_service
 from llm_call import quick_call
 
-def step1_entity_recognition(query: str):
+def step1_entity_recognition(query: str, graph_id: str = None):
     """
     Performs entity recognition on the given query.
     """
-    neo4j_service = get_neo4j_service()
+    neo4j_service = get_neo4j_service(graph_id = graph_id)
     entities = neo4j_service.list_entities()
     
     entity_map = {entity["name"]: {"id": entity["id"], "description": entity["description"]} 
@@ -21,11 +21,11 @@ def step1_entity_recognition(query: str):
     entity = None if llm_res['json_content']['entity'] == '' else llm_res['json_content']['entity']
     return entity
 
-def step2_get_subgraph(entity: str):
+def step2_get_subgraph(entity: str, graph_id: str = None):
     """
     Retrieves the subgraph for the given entity.
     """
-    neo4j_service = get_neo4j_service()
+    neo4j_service = get_neo4j_service(graph_id = graph_id)
     entity_path = neo4j_service.get_format_subgraph_paths(entity, depth=2)
     entity_path = [item for item in entity_path if '->' in item]
     return entity_path
