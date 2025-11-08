@@ -211,12 +211,12 @@ def display_knowledge_graph_plotly(paths: List[str], center_entity: str):
     fig = create_plotly_graph(G, center_entity)
     st.plotly_chart(fig, use_container_width=True)
     
-    # 显示关系详情
-    with st.expander("🔍 查看关系详情"):
-        for edge in G.edges(data=True):
-            source, target, data = edge
-            relation = data.get('relation', '未知关系')
-            st.write(f"**{source}** --{relation}--> **{target}**")
+    # # 显示关系详情
+    # with st.expander("🔍 查看关系详情"):
+    #     for edge in G.edges(data=True):
+    #         source, target, data = edge
+    #         relation = data.get('relation', '未知关系')
+    #         st.write(f"**{source}** --{relation}--> **{target}**")
     
     # 显示原始路径（可折叠）
     with st.expander("📋 查看原始路径"):

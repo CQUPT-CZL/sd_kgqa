@@ -4,6 +4,12 @@ from graph_visualizer_plotly import display_knowledge_graph_plotly
 
 st.title("KG QA")
 
+st.text("Example1: 带钢头部温降较大的原因是什么？")
+
+st.text("Example2: 精轧机穿带稳定性下降的原因有哪些？")
+
+st.text("Example3: 轧机瞬时弹跳量增加会导致什么？")
+
 query = st.text_input("Enter your query:")
 
 if st.button("Ask"):
