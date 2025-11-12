@@ -17,6 +17,7 @@ class QueryResponse(BaseModel):
     center_entity: Optional[str]
     paths: Optional[List[str]]
     answer: str
+    referenced_paths: Optional[List[str]] = []
 
 @app.post("/query", response_model=QueryResponse)
 async def query_endpoint(request: QueryRequest):
@@ -33,9 +34,14 @@ async def query_endpoint(request: QueryRequest):
     paths = step2_get_subgraph(center_entity, graph_id = request.graph_id)
     
     # Step 3: QA with LLM
-    answer = step3_qa_with_llm(request.query, str(paths))
-    
-    return QueryResponse(center_entity=center_entity, paths=paths, answer=answer)
+    qa_result = step3_qa_with_llm(request.query, str(paths))
+
+    return QueryResponse(
+        center_entity=center_entity,
+        paths=paths,
+        answer=qa_result.get('answer', ''),
+        referenced_paths=qa_result.get('referenced_paths', [])
+    )
 
 @app.get("/")
 def read_root():

@@ -33,10 +33,12 @@ def step2_get_subgraph(entity: str, graph_id: str = None):
 def step3_qa_with_llm(query: str, entity_path: str):
     """
     Answers the query based on the provided subgraph.
+    Returns: dict with 'answer' and 'referenced_paths'
     """
     prompt = get_llm_qa_prompt(query, entity_path)
-    llm_res = quick_call(prompt)
-    return llm_res['content']
+    llm_res = quick_call(prompt, return_json=True)
+    print(llm_res)
+    return llm_res['json_content']
     
     
 
