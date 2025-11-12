@@ -24,5 +24,7 @@ dependencies = [
     "streamlit>=1.32.2",
     "plotly>=5.15.0",
     "streamlit_agraph",
+    "matplotlib>=3.10.7",
+    "graphviz>=0.21",
 ]
 

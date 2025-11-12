@@ -37,7 +37,6 @@ def step3_qa_with_llm(query: str, entity_path: str):
     """
     prompt = get_llm_qa_prompt(query, entity_path)
     llm_res = quick_call(prompt, return_json=True)
-    print(llm_res)
     return llm_res['json_content']
     
     
