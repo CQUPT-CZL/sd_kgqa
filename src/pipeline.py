@@ -12,6 +12,7 @@ def step1_entity_recognition(query: str, graph_id: str = None):
     entity_map = {entity["name"]: {"id": entity["id"], "description": entity["description"]} 
         for entity in entities if "Entity" in entity["labels"]}
 
+    print("find", len(entity_map.keys()), "entities")
     from prompts import get_llm_re_entity_prompt
 
     prompt = get_llm_re_entity_prompt(query, entity_map.keys())
