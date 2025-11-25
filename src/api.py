@@ -1,5 +1,4 @@
 from fastapi import FastAPI
-from fastapi.responses import Response
 from pydantic import BaseModel
 from typing import List, Optional
 from pipeline import step1_entity_recognition, step2_get_subgraph, step3_qa_with_llm
@@ -66,13 +65,27 @@ async def query_endpoint(request: QueryRequest):
         visualization_base64 = None
         referenced_paths = qa_result.get('referenced_paths', [])
         if referenced_paths:
-            # 生成可视化图片
-            img = visualize_paths_with_graphviz(referenced_paths)
-            # 转换为 base64
-            buf = io.BytesIO()
-            img.save(buf, format='PNG')
-            buf.seek(0)
-            visualization_base64 = base64.b64encode(buf.read()).decode('utf-8')
+            try:
+                # 生成可视化图片
+                img = visualize_paths_with_graphviz(referenced_paths)
+                # 转换为 base64
+                buf = io.BytesIO()
+                img.save(buf, format='PNG')
+                buf.seek(0)
+                visualization_base64 = base64.b64encode(buf.read()).decode('utf-8')
+            except Exception as viz_error:
+                # 图片生成失败时不影响主流程，只记录错误
+                logger.log_query(
+                    query=request.query,
+                    center_entity=center_entity,
+                    all_paths=None,
+                    answer="",
+                    referenced_paths=None,
+                    graph_id=request.graph_id,
+                    execution_time=0,
+                    error=f"Visualization failed: {str(viz_error)}"
+                )
+                visualization_base64 = None  # 确保返回None而不是报错
 
         answer = qa_result.get('answer', '')
 
