@@ -127,6 +127,36 @@ class QueryLogger:
         logger.info(f"Query logged: '{query}' -> Entity: {center_entity}")
         return log_entry
 
+    def log_entity_recognition(self,
+                               query: str,
+                               candidates_count: int,
+                               selected_entity: Optional[str],
+                               graph_id: Optional[str] = None) -> None:
+        """
+        记录实体识别步骤的中间结果
+        
+        Args:
+            query: 用户查询
+            candidates_count: 找到的候选实体数量
+            selected_entity: 最终选择的实体
+            graph_id: 图谱ID
+        """
+        timestamp = datetime.now()
+        try:
+            with open(self.text_log_file, 'a', encoding='utf-8') as f:
+                f.write("-" * 40 + "\n")
+                f.write(f"时间: {timestamp.strftime('%Y-%m-%d %H:%M:%S')}\n")
+                f.write(f"步骤: 实体识别\n")
+                f.write(f"图谱ID: {graph_id}\n")
+                f.write(f"查询: {query}\n")
+                f.write(f"候选实体数: {candidates_count}\n")
+                f.write(f"识别实体: {selected_entity}\n")
+                f.write("-" * 40 + "\n\n")
+        except Exception as e:
+            logger.error(f"Failed to write entity recognition log: {e}")
+            
+        logger.info(f"Entity recognition logged: '{query}' -> {selected_entity} (from {candidates_count} candidates)")
+
     def get_statistics(self) -> Dict[str, Any]:
         """
         获取当天的查询统计信息
